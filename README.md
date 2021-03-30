@@ -1,5 +1,5 @@
 # DetCo.pytorch
-An unofficial PyTorch implementation of DetCo https://arxiv.org/pdf/2102.04803.pdf. Official implementation can be found [here](https://github.com/xieenze/DetCo).
+An unofficial PyTorch implementation of DetCo [paper](https://arxiv.org/pdf/2102.04803.pdf). Official implementation can be found [here](https://github.com/xieenze/DetCo).
 
 <img width="746" alt="スクリーンショット 2021-03-30 11 39 04" src="https://user-images.githubusercontent.com/13246825/112925323-a5cab780-914c-11eb-80f9-19199fb439d6.png">
 
