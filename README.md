@@ -20,4 +20,4 @@ pip install -r requirements.txt
 - [Original paper](https://arxiv.org/pdf/2102.04803.pdf)
 - [Official implementation](https://github.com/xieenze/DetCo)
 - [MoCo official implementation](https://github.com/facebookresearch/moco)
-- [Resnet PyTorch code](https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py)<img width="746" alt="スクリーンショット 2021-03-30 11 39 04" src="https://user-images.githubusercontent.com/13246825/112925312-a19e9a00-914c-11eb-8508-0be401737df7.png">
+- [Resnet PyTorch code](https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py)
