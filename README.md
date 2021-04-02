@@ -11,9 +11,15 @@ pip install -r requirements.txt
 ```
 
 ## Usage
+- An example as in [main_decto.py](https://github.com/shuuchen/DetCo.pytorch/blob/main/main_decto.py):
+```python
+...
+model = DetCo(resnet50(), args.detco_dim, args.detco_k, args.detco_m, args.detco_t)
+...
+```
 
 ## TODO
-- [ ] ImageNet training & performance checking
+- [ ] object detection training & performance checking on certain datasets
 
 
 ## References
