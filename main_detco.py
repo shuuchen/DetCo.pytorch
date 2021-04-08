@@ -119,7 +119,7 @@ def main():
 
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
-    ngpus_per_node = torch.cuda.device_count()
+    ngpus_per_node = torch.cuda.device_count() // 2  # use 4 gpus only
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -277,19 +277,20 @@ def main_worker(gpu, ngpus_per_node, args):
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = [AverageMeter('Loss', ':.4e')]*8
+    losses_meter = [AverageMeter('Loss', ':.4e')]*8
+    total_loss_meter = AverageMeter('Loss', ':.4e')
     top1 = [AverageMeter('Acc@1', ':6.2f')]*8
     top5 = [AverageMeter('Acc@5', ':6.2f')]*8
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
+        [batch_time, data_time, losses_meter, total_loss_meter],
         prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()
 
     end = time.time()
-    for i, (images, _) in enumerate(train_loader):
+    for idx, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -300,28 +301,29 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output
         output, target = model(im_q=images[0], im_k=images[1])
         
-        loss = [criterion(output[:,i,:], target[:,i]) for i in range(8)]
+        losses = [criterion(output[:,i,:], target[:,i]) for i in range(8)]
+        total_loss = sum(losses)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
+        total_loss_meter.update(total_loss.item(), images[0].size(0))
         for i in range(8):
             acc1, acc5 = accuracy(output[:,i,:], target[:,i], topk=(1, 5))
-            losses[i].update(loss[i].item(), images[0].size(0))
+            losses_meter[i].update(losses[i].item(), images[0].size(0))
             top1[i].update(acc1[0], images[0].size(0))
             top5[i].update(acc5[0], images[0].size(0))
 
         # compute gradient and do SGD step
-        loss = sum(loss)
         optimizer.zero_grad()
-        loss.backward()
+        total_loss.backward()
         optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
-            progress.display(i)
+        if idx % args.print_freq == 0:
+            progress.display(idx)
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -362,7 +364,11 @@ class ProgressMeter(object):
 
     def display(self, batch):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
+        for meter in self.meters:
+            if isinstance(meter, list):
+                entries += [str(x) for x in meter]
+            else:
+                entries += [str(meter)]
         print('\t'.join(entries))
 
     def _get_batch_fmtstr(self, num_batches):
