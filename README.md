@@ -13,6 +13,18 @@ pip install -r requirements.txt
 ## Usage
 - Please refer to [main_decto.py](https://github.com/shuuchen/DetCo.pytorch/blob/main/main_decto.py):
 
+## Unsupervised training
+- This implementation reserved original moco implementation as much as possible. Therefore the command line for unsupervised training is also similar to that of [moco](https://github.com/facebookresearch/moco#unsupervised-training). You can train like:
+```python
+python main_detco.py \
+  -a resnet50 \
+  --lr 0.015 \
+  --batch-size 128 \
+  --dist-url 'tcp://localhost:10001' --multiprocessing-distributed --world-size 1 --rank 0 \
+  [your imagenet-folder with train and val folders] \
+  --detco-t 0.2 --aug-plus --cos
+```
+
 ## TODO
 - [ ] object detection training & performance checking on certain datasets
 
