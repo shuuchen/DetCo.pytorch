@@ -24,6 +24,9 @@ import detco.loader
 import detco.builder
 import detco.models as models
 
+from torch.utils.tensorboard import SummaryWriter
+
+
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
@@ -96,6 +99,10 @@ parser.add_argument('--aug-plus', action='store_true',
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
+
+task_name = '0409'
+summary_dir = f'./runs/{task_name}'
+writer = SummaryWriter()
 
 def main():
     args = parser.parse_args()
@@ -262,7 +269,10 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        mean_losses, mean_total_loss = train(train_loader, model, criterion, optimizer, epoch, args)
+        writer.add_scalar('total_loss/train', mean_total_loss, args.start_epoch + epoch + 1)
+        for i in range(12):
+            writer.add_scalar(f'loss_{i}/train', mean_losses[i], args.start_epoch + epoch + 1)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -277,10 +287,10 @@ def main_worker(gpu, ngpus_per_node, args):
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses_meter = [AverageMeter('Loss', ':.4e')]*8
+    losses_meter = [AverageMeter('Loss', ':.4e')]*12
     total_loss_meter = AverageMeter('Loss', ':.4e')
-    top1 = [AverageMeter('Acc@1', ':6.2f')]*8
-    top5 = [AverageMeter('Acc@5', ':6.2f')]*8
+    top1 = [AverageMeter('Acc@1', ':6.2f')]*12
+    top5 = [AverageMeter('Acc@5', ':6.2f')]*12
     progress = ProgressMeter(
         len(train_loader),
         [batch_time, data_time, losses_meter, total_loss_meter],
@@ -290,6 +300,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
+    mean_total_loss = 0
+    mean_losses = [0]*12  # 4 global losses, 4 local losses, 4 local-global losses
     for idx, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -301,13 +313,17 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output
         output, target = model(im_q=images[0], im_k=images[1])
         
-        losses = [criterion(output[:,i,:], target[:,i]) for i in range(8)]
+        losses = [criterion(output[:,i,:], target[:,i]) for i in range(12)]
         total_loss = sum(losses)
+
+        # loss stats
+        mean_losses = [x + y for x, y in zip(mean_losses, losses)]
+        mean_total_loss += total_loss
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
         total_loss_meter.update(total_loss.item(), images[0].size(0))
-        for i in range(8):
+        for i in range(12):
             acc1, acc5 = accuracy(output[:,i,:], target[:,i], topk=(1, 5))
             losses_meter[i].update(losses[i].item(), images[0].size(0))
             top1[i].update(acc1[0], images[0].size(0))
@@ -324,6 +340,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         if idx % args.print_freq == 0:
             progress.display(idx)
+
+    mean_losses = [x / len(train_loader) for x in mean_losses]
+    mean_total_loss /= len(train_loader)
+
+    return mean_losses, mean_total_loss
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):

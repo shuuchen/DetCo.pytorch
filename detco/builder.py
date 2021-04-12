@@ -138,13 +138,19 @@ class DetCo(nn.Module):
 
         # compute logits
         # Einstein sum is more intuitive
-        # positive logits: list of Nx1
+        # g2g and l2l logits as shown in Fig.4(b) of DetCo paper
+        queue = self.queue.clone().detach()
         l_pos = torch.einsum('bnw,bnw->bn', [q, k]).unsqueeze(2)
-        
-        # negative logits: NxK
-        l_neg = torch.einsum('bnw,nwk->bnk', [q, self.queue.clone().detach()])
+        l_neg = torch.einsum('bnw,nwk->bnk', [q, queue])
 
-        # logits: Nx(1+K)
+        # l2g logits
+        l_pos_cross = torch.einsum('bnw,bnw->bn', [q[:,4:,:], k[:,:4,:]]).unsqueeze(2)
+        l_neg_cross = torch.einsum('bnw,nwk->bnk', [q[:,4:,:], queue[:4,:,:]])
+
+        l_pos = torch.cat([l_pos, l_pos_cross], dim=1)
+        l_neg = torch.cat([l_neg, l_neg_cross], dim=1)
+
+        # logits: BxNx(1+K)
         logits = torch.cat([l_pos, l_neg], dim=2)
 
         # apply temperature
