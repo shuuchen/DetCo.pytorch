@@ -229,7 +229,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.aug_plus:
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
-            transforms.RandomResizedCrop(222, scale=(0.2, 1.)),  # set 222 from 224 here in order to be divisible by 3 in jigsaw augmentation
+            transforms.RandomResizedCrop(255, scale=(0.6, 1.)),  # change from 224 here in order to be divisible by 3 in jigsaw augmentation
             transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
             ], p=0.8),
@@ -242,7 +242,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         # MoCo v1's aug: the same as InstDisc https://arxiv.org/abs/1805.01978
         augmentation = [
-            transforms.RandomResizedCrop(222, scale=(0.2, 1.)),
+            transforms.RandomResizedCrop(255, scale=(0.6, 1.)),
             transforms.RandomGrayscale(p=0.2),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
             transforms.RandomHorizontalFlip(),
@@ -296,6 +296,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         [batch_time, data_time, losses_meter, total_loss_meter],
         prefix="Epoch: [{}]".format(epoch))
 
+    # loss weights as proposed by DetCo paper
+    loss_weights = [0.1, 0.4, 0.7, 1.0]
+
     # switch to train mode
     model.train()
 
@@ -314,7 +317,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         output, target = model(im_q=images[0], im_k=images[1])
         
         losses = [criterion(output[:,i,:], target[:,i]) for i in range(12)]
-        total_loss = sum(losses)
+        total_loss = sum(loss * loss_weights[i%4] for i, loss in enumerate(losses))
 
         # loss stats
         mean_losses = [x + y for x, y in zip(mean_losses, losses)]

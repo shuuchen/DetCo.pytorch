@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from einops import rearrange
+from torchvision import transforms
 
 try:
     from torch.hub import load_state_dict_from_url
@@ -217,6 +218,10 @@ class ResNet(nn.Module):
             self.global_mlps += [MLP(init_in_channels * 2 ** i, num_classes)]
             self.local_mlps += [MLP(init_in_channels * 2 ** i, num_classes, False)]
 
+        self.transform = transforms.Compose([
+                                     transforms.ToPILImage(),
+                                     transforms.RandomCrop(64),
+                                     transforms.ToTensor()])
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -262,12 +267,14 @@ class ResNet(nn.Module):
     def jigsaw(self, x, nh=3, nw=3):
     
         _, _, h, w = x.size()
-        
+        assert h % nh == 0 and w % nw == 0, f'{h} or {w} is not divisible by {nh} or {nw}'
+
         x_list = []
         for i in range(nh):
             for j in range(nw):
                 h0,h1,w0,w1 = i/nh*h, (i+1)/nh*h, j/nw*w, (j+1)/nw*w
-                x_list += [x[:, :, int(h0):int(h1), int(w0):int(w1)]]
+                patch = x[:, :, int(h0):int(h1), int(w0):int(w1)]
+                x_list += [self.transform(patch)]
 
         random.shuffle(x_list)
 
