@@ -218,10 +218,6 @@ class ResNet(nn.Module):
             self.global_mlps += [MLP(init_in_channels * 2 ** i, num_classes)]
             self.local_mlps += [MLP(init_in_channels * 2 ** i, num_classes, False)]
 
-        self.transform = transforms.Compose([
-                                     transforms.ToPILImage(),
-                                     transforms.RandomCrop(64),
-                                     transforms.ToTensor()])
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -264,17 +260,27 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def jigsaw(self, x, nh=3, nw=3):
+    # random crop a tensor x to size (ch, cw)
+    def _random_crop(self, x, ch=64, cw=64):
+        _, _, h, w = x.size()
+        assert h >= ch and w >= cw, f'crop error: {h} or {w} is not larger than {ch} or {cw}'
+
+        i = random.randint(0, h - ch)
+        j = random.randint(0, w - cw)
+
+        return x[:, :, i:i+ch, j:j+cw]
+
+    def _jigsaw(self, x, nh=3, nw=3):
     
         _, _, h, w = x.size()
-        assert h % nh == 0 and w % nw == 0, f'{h} or {w} is not divisible by {nh} or {nw}'
+        assert h % nh == 0 and w % nw == 0, f'jigsaw error: {h} or {w} is not divisible by {nh} or {nw}'
 
         x_list = []
         for i in range(nh):
             for j in range(nw):
                 h0,h1,w0,w1 = i/nh*h, (i+1)/nh*h, j/nw*w, (j+1)/nw*w
                 patch = x[:, :, int(h0):int(h1), int(w0):int(w1)]
-                x_list += [self.transform(patch)]
+                x_list += [self._random_crop(patch)]
 
         random.shuffle(x_list)
 
@@ -299,7 +305,7 @@ class ResNet(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         global_reps = self._forward_impl(x)
-        local_reps = self._forward_impl(self.jigsaw(x), False)
+        local_reps = self._forward_impl(self._jigsaw(x), False)
         
         return torch.cat([global_reps, local_reps], dim=1)
 
