@@ -99,11 +99,6 @@ parser.add_argument('--aug-plus', action='store_true',
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
-
-task_name = '0409'
-summary_dir = f'./runs/{task_name}'
-writer = SummaryWriter()
-
 def main():
     args = parser.parse_args()
 
@@ -138,12 +133,13 @@ def main():
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
 
-
+master_gpu = 4
 def main_worker(gpu, ngpus_per_node, args):
-    args.gpu = gpu
+    args.gpu = gpu + master_gpu
+    print(args.gpu, '>'*10)
 
     # suppress printing if not master
-    if args.multiprocessing_distributed and args.gpu != 0:
+    if args.multiprocessing_distributed and args.gpu != master_gpu:
         def print_pass(*args):
             pass
         builtins.print = print_pass
@@ -152,14 +148,22 @@ def main_worker(gpu, ngpus_per_node, args):
         print("Use GPU: {} for training".format(args.gpu))
 
     if args.distributed:
+
         if args.dist_url == "env://" and args.rank == -1:
             args.rank = int(os.environ["RANK"])
         if args.multiprocessing_distributed:
             # For multiprocessing distributed training, rank needs to be the
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
+            if args.rank == 0:
+                task_name = '0409'
+                summary_dir = f'./runs/{task_name}'
+                writer = SummaryWriter()
+                print(f'create tensorboard writer at rank {args.rank}')
+
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
+
     # create model
     print("=> creating model '{}'".format(args.arch))
     model = detco.builder.DetCo(
@@ -270,12 +274,13 @@ def main_worker(gpu, ngpus_per_node, args):
 
         # train for one epoch
         mean_losses, mean_total_loss = train(train_loader, model, criterion, optimizer, epoch, args)
-        writer.add_scalar('total_loss/train', mean_total_loss, args.start_epoch + epoch + 1)
-        for i in range(12):
-            writer.add_scalar(f'loss_{i}/train', mean_losses[i], args.start_epoch + epoch + 1)
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
+        if args.distributed and args.rank == 0:
+            writer.add_scalar('total_loss/train', mean_total_loss, args.start_epoch + epoch + 1)
+            for i in range(12):
+                writer.add_scalar(f'loss_{i}/train', mean_losses[i], args.start_epoch + epoch + 1)
+
+        if (not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0)) and epoch % 50 == 0:
             save_checkpoint({
                 'epoch': epoch + 1,
                 'arch': args.arch,
@@ -425,7 +430,7 @@ def accuracy(output, target, topk=(1,)):
 
         res = []
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
