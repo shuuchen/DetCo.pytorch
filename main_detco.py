@@ -156,9 +156,9 @@ def main_worker(gpu, ngpus_per_node, args):
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
             if args.rank == 0:
-                task_name = '0409'
-                summary_dir = f'./runs/{task_name}'
-                writer = SummaryWriter()
+                task_name = f'{ngpus_per_node}gpu_{args.batch_size}bs_{args.epochs}epo'
+                summary_dir = f'runs/{task_name}'
+                writer = SummaryWriter(summary_dir)
                 print(f'create tensorboard writer at rank {args.rank}')
 
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
